@@ -32,7 +32,7 @@ public class myTerminal implements CommandLineRunner{
             if(isLoggedIn()) {
                 runMainMenu();
             }else{
-             runLoginMenu();
+                runLoginMenu();
             }
         }
     }

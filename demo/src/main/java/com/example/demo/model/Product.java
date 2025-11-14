@@ -3,7 +3,7 @@ package com.example.demo.model;
 import jakarta.persistence.*; // 引入所有 JPA 註解
 
 @Entity
-@Table(name = "products")
+@Table(name = "PRODUCTS")
 public class Product {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
