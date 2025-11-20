@@ -1,0 +1,41 @@
+/* src/style.css */
+
+/* 1. 定義全域變數 (從你的 vue 檔剪下貼過來) */
+:root {
+    --bg-body: #f8fafc;
+    --bg-card: #ffffff;
+    --text-main: #1a202c;
+    --text-sec: #718096;
+    --border: #e2e8f0;
+    --th-bg: #f7fafc;
+    --hover-bg: #f8fafc;
+    --select-bg: #ebf8ff;
+    --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --badge-bg: #ebf8ff;
+    --badge-text: #3182ce;
+}
+
+/* 2. 深色模式設定 */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-body: #1a1a1a;
+        --bg-card: #2d2d2d;
+        --text-main: #f0f0f0;
+        --text-sec: #a0aec0;
+        --border: #404040;
+        --th-bg: #333333;
+        --hover-bg: #3a3a3a;
+        --select-bg: #2c5282;
+        --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+        --badge-bg: #2c5282;
+        --badge-text: #90cdf4;
+    }
+}
+
+/* 3. 設定全域 Body 樣式 */
+body {
+    background-color: var(--bg-body);
+    color: var(--text-main);
+    margin: 0;
+    font-family: 'Inter', sans-serif; /* 字型統一設定 */
+}
