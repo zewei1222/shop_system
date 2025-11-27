@@ -1,16 +1,17 @@
 package com.example.demo.controller;
 
+
 import com.example.demo.dto.ProductRequest;
 import com.example.demo.dto.ProductResponse;
 import com.example.demo.model.Product;
-import com.example.demo.model.Category;
 import com.example.demo.model.User;
 import com.example.demo.service.ProductService;
-import com.example.demo.repository.UserRepository;
-
-import org.springframework.http.HttpStatus;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,94 +20,62 @@ import java.util.List;
 @RestController
 @RequestMapping("/product")
 public class ProductController {
-    @Autowired
-    private ProductService  productService;
 
     @Autowired
-    private UserRepository userRepository;
+    private ProductService productService;
 
-    private User getMockCurrentUser() {
-        // 假設固定用 admin 登入 (你需要確保資料庫有這個人)
-        return userRepository.findByName("wen") // 或你的測試帳號
-                .orElseThrow(() -> new RuntimeException("Mock user not found"));
-    }
-
-    @GetMapping
-    public ResponseEntity<List<ProductResponse>> getAllProducts() {
-        User currentUser = getMockCurrentUser();
-
-        // 1. 從 Service 拿到 Entity 列表
-        List<Product> products = productService.getAllProducts(currentUser);
-
-        // 2. 轉換成 DTO 列表 (使用 Stream API 比較簡潔)
-        List<ProductResponse> responseList = products.stream()
-                .map(ProductResponse::new) // 呼叫剛剛寫的建構子
-                .toList(); // 或者 .collect(Collectors.toList()) 如果你是 Java 16 以下
-
-        return ResponseEntity.ok(responseList);
-    }
-
+    //[C]
     @PostMapping
-    public ResponseEntity<ProductResponse> createProduct(@RequestBody ProductRequest request) {
-        User currentUser = getMockCurrentUser();
-
-        // A. 將 DTO 轉成 Entity (手動轉換)
-        Product product = new Product();
-        product.setName(request.getName());
-        product.setDescription(request.getDescription());
-        product.setPrice(request.getPrice());
-        product.setStock(request.getStock());
-
-        // 處理分類：前端傳字串 -> 我們包成物件給 Service 處理
-        product.setCategory(new Category(null, request.getCategoryName()));
-
-        // B. 呼叫 Service
-        Product createdProduct = productService.createProduct(product, currentUser);
-
-        // C. 回傳 201 Created
+    public ResponseEntity<ProductResponse> createProduct(@Valid @RequestBody ProductRequest request,
+                                                         @AuthenticationPrincipal User currentUser) {
+        Product createdProduct = productService.createProduct(request, currentUser);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(new ProductResponse(createdProduct));
     }
 
-    @PutMapping("/{id}") // 網址: /api/products/10
-    public ResponseEntity<ProductResponse> updateProduct(@PathVariable Long id,
-                                                 @RequestBody ProductRequest request) {
-        User currentUser = getMockCurrentUser();
+    //[R]
+    @GetMapping
+    public ResponseEntity<Page<ProductResponse>> getAllProducts(
+            @AuthenticationPrincipal User currentUser,
+            @RequestParam(defaultValue = "0") int page,     // 預設第 0 頁
+            @RequestParam(defaultValue = "10") int size,    // 預設一頁 10 筆
+            @RequestParam(defaultValue = "") String keyword // 預設無關鍵字
+    ) {
 
-        // 將 DTO 轉成 Entity
-        Product newInfo = new Product();
-        newInfo.setName(request.getName());
-        newInfo.setDescription(request.getDescription());
-        newInfo.setPrice(request.getPrice());
-        newInfo.setStock(request.getStock());
+        Page<Product> productPage = productService.getProducts(currentUser, keyword, page, size);
 
-        if (request.getCategoryName() != null) {
-            newInfo.setCategory(new Category(null, request.getCategoryName()));
-        }
+        Page<ProductResponse> responsePage = productPage.map(ProductResponse::new);
 
-        Product updatedProduct = productService.updateProduct(id, newInfo, currentUser);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new ProductResponse(updatedProduct));
+        return ResponseEntity.ok(responsePage);
     }
 
-    // --- 4. 刪除商品 (DELETE) ---
+    @PutMapping("/{id}")
+    public ResponseEntity<ProductResponse> updateProduct(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User currentUser,
+            @RequestBody ProductRequest request) {
+
+        Product updatedProduct = productService.updateProduct(request, currentUser, id);
+        return ResponseEntity.ok(new ProductResponse(updatedProduct));
+    }
+
+
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteProduct(@PathVariable Long id) {
-        User currentUser = getMockCurrentUser();
+    public ResponseEntity<Void> deleteProduct(@PathVariable Long id, @AuthenticationPrincipal User currentUser) {
 
         productService.deleteProduct(id, currentUser);
 
-        return ResponseEntity.noContent().build(); // 回傳 204 No Content (刪除成功的標準回應)
+        return ResponseEntity.noContent().build();
     }
 
-    // --- 5. 批次刪除 (DELETE) ---
-    @DeleteMapping("/batch")
-    public ResponseEntity<Void> deleteBatch(@RequestBody List<Long> ids) {
-        User currentUser = getMockCurrentUser();
 
-        // 現在 Service 接收的就是 ids，直接傳進去就好
+    @DeleteMapping("/batch")
+    public ResponseEntity<Void> deleteBatch(@RequestBody List<Long> ids, @AuthenticationPrincipal User currentUser) {
+
         productService.deleteProductsBatch(ids, currentUser);
 
         return ResponseEntity.noContent().build();
     }
+
+
 }

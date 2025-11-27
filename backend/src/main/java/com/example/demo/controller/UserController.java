@@ -1,43 +1,48 @@
 package com.example.demo.controller;
 
-import com.example.demo.model.User;
 import com.example.demo.model.Role;
-import com.example.demo.dto.RegisterRequest;
-import com.example.demo.dto.LoginRequest;
-import com.example.demo.dto.UserResponse;
-
+import com.example.demo.model.User;
 import com.example.demo.service.UserService;
-import jakarta.validation.Valid;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
+import com.example.demo.repository.UserRepository; // 簡單起見直接用 Repository 示範
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-@CrossOrigin
-@RestController
-@RequestMapping("/api/users")
-public class UserController {
-    @Autowired
-    private UserService userService;
+import java.util.List;
 
-    @PostMapping("/login")
-    public ResponseEntity<UserResponse> login(@RequestBody LoginRequest loginRequest) {
-        User user = userService.login(loginRequest.getUsername(), loginRequest.getPassword());
-        if (user != null) {
-            return ResponseEntity.ok(new UserResponse(user));
-        }else{
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+@RestController
+@RequestMapping("/user")
+@RequiredArgsConstructor
+public class UserController {
+
+    private final UserRepository userRepository;
+
+    // [R] 取得所有使用者 (僅限管理員)
+    @GetMapping
+    public ResponseEntity<?> getAllUsers(@AuthenticationPrincipal User currentUser) {
+        // 簡易權限檢查
+        if (currentUser.getRole() != Role.ROLE_ADMIN) {
+            return ResponseEntity.status(403).body("權限不足：僅管理員可執行");
         }
+
+        // 實務上建議回傳 UserDTO 而不是 User Entity (避免洩漏密碼)
+        // 但這裡為了教學方便，直接回傳 List<User>
+        // ★重要：請確保 User Entity 的 password 欄位有加 @JsonIgnore (Jackson)
+        // 或是你前端不要顯示密碼欄位
+        return ResponseEntity.ok(userRepository.findAll());
     }
 
-    @PostMapping("/register")
-    @Valid
-    public ResponseEntity<?> register(@RequestBody RegisterRequest registerRequest) {
-        try{
-            userService.addUser(new User(null, registerRequest.getUsername(), registerRequest.getPassword(), Role.ROLE_USER));
-            return ResponseEntity.status(HttpStatus.CREATED).body("註冊成功");
-        }catch (RuntimeException e){
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+    // [D] 刪除使用者
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteUser(
+            @PathVariable Long id,
+            @AuthenticationPrincipal User currentUser) {
+
+        if (currentUser.getRole() != Role.ROLE_ADMIN) {
+            return ResponseEntity.status(403).body("權限不足");
         }
+        userRepository.deleteById(id);
+        return ResponseEntity.noContent().build();
     }
 }

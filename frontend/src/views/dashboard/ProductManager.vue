@@ -20,35 +20,37 @@ const currentPage = ref(0)
 const totalPages = ref(0)
 const keyword = ref('')
 
-// 表單資料
+// 表單資料 (注意：這裡使用 categoryId)
 const productForm = ref({
   name: '',
   description: '',
   price: 0,
   stock: 0,
-  categoryName: ''
+  categoryId: null // 預設為 null
 })
 
 // --- 彈窗控制 ---
 const openCreateModal = () => {
   currentProductId.value = null
-  productForm.value = { name: '', description: '', price: 0, stock: 0, categoryName: '' }
+  // 重置表單
+  productForm.value = { name: '', description: '', price: 0, stock: 0, categoryId: null }
   showModal.value = true
 }
 
 const openEditModal = (p) => {
   currentProductId.value = p.id
+  // 修正：確保屬性名稱對應正確
   productForm.value = {
     name: p.name,
     description: p.description,
     price: p.price,
     stock: p.stock,
-    categoryName: p.categoryName
+    categoryId: p.categoryId // 綁定 ID，確保下拉選單能選中
   }
   showModal.value = true
 }
 
-// 彈窗遮罩點擊判斷 (防止誤觸)
+// 彈窗遮罩點擊判斷
 const isOverlayClick = ref(false)
 const handleOverlayMousedown = (e) => { if (e.target === e.currentTarget) isOverlayClick.value = true }
 const handleOverlayMouseup = (e) => {
@@ -56,7 +58,6 @@ const handleOverlayMouseup = (e) => {
   isOverlayClick.value = false
 }
 
-// 鍵盤事件 (Esc 關閉)
 const handleKeydown = (e) => {
   if (showModal.value && e.key === 'Escape') {
     showModal.value = false
@@ -71,34 +72,42 @@ const handleSubmit = () => {
   }
 }
 
+// --- 錯誤處理小工具 (解決 [object Object] 問題) ---
+const handleError = (err, defaultMsg) => {
+  console.error(err) // 先在 Console 印出完整錯誤方便 Debug
+  let msg = defaultMsg
+  if (err.response && err.response.data) {
+    const data = err.response.data
+    // 如果後端回傳物件 (Validation 錯誤)，轉成字串顯示
+    if (typeof data === 'object') {
+      msg = data.message || data.error || JSON.stringify(data, null, 2)
+    } else {
+      msg = data // 純文字錯誤
+    }
+  }
+  alert(msg)
+}
+
 // --- API 動作 ---
 
-// 1. 抓取商品列表 (支援分頁與搜尋)
+// 1. 抓取商品列表
 const getProducts = async (page = 0) => {
   loading.value = true
   errorMsg.value = ''
 
-  if (!currentUser.value || !currentUser.value.id) {
-    loading.value = false
-    return
-  }
-
   try {
     const response = await axios.get('/product', {
       params: {
-        userId: currentUser.value.id,
         page: page,
-        size: 10, // 固定每頁 10 筆
+        size: 10,
         keyword: keyword.value
       }
     })
 
-    // 更新資料與分頁資訊
     products.value = response.data.content
     currentPage.value = response.data.number
     totalPages.value = response.data.totalPages
-
-    selectedIds.value = [] // 換頁或重新搜尋時清空勾選
+    selectedIds.value = []
   } catch (err) {
     console.error(err)
     errorMsg.value = '無法取得商品列表'
@@ -107,12 +116,8 @@ const getProducts = async (page = 0) => {
   }
 }
 
-// 搜尋功能
-const handleSearch = () => {
-  getProducts(0) // 搜尋從第 0 頁開始
-}
+const handleSearch = () => { getProducts(0) }
 
-// 換頁功能
 const changePage = (page) => {
   if (page >= 0 && page < totalPages.value) {
     getProducts(page)
@@ -121,33 +126,34 @@ const changePage = (page) => {
 
 // 2. 新增商品
 const createProduct = async () => {
-  if (!productForm.value.name || !productForm.value.categoryName) {
+  // 修正：檢查 categoryId 是否存在
+  if (!productForm.value.name || !productForm.value.categoryId) {
     alert('名稱和分類是必填的！')
     return
   }
 
   try {
-    const payload = { ...productForm.value, ownerId: currentUser.value.id }
+    const payload = { ...productForm.value }
     await axios.post('/product', payload)
+
     alert('新增成功！')
     showModal.value = false
-    getProducts(0) // 回到第一頁
+    getProducts(0)
   } catch (err) {
-    alert(err.response?.data || '新增失敗')
+    handleError(err, '新增失敗')
   }
 }
 
 // 3. 編輯商品
 const updateProduct = async () => {
   try {
-    await axios.put(`/product/${currentProductId.value}`, productForm.value, {
-      params: { userId: currentUser.value.id }
-    })
+    await axios.put(`/product/${currentProductId.value}`, productForm.value)
+
     alert('編輯成功！')
     showModal.value = false
-    getProducts(currentPage.value) // 停留在當前頁
+    getProducts(currentPage.value)
   } catch (err) {
-    alert(err.response?.data || "編輯失敗")
+    handleError(err, '編輯失敗')
   }
 }
 
@@ -156,13 +162,12 @@ const deleteProduct = async (id) => {
   if (!confirm("確定要刪除這個商品嗎？")) return
 
   try {
-    await axios.delete(`/product/${id}`, {
-      params: { userId: currentUser.value.id }
-    })
+    await axios.delete(`/product/${id}`)
+
     alert('刪除成功！')
     getProducts(currentPage.value)
   } catch (err) {
-    alert(err.response?.data || '刪除失敗')
+    handleError(err, '刪除失敗')
   }
 }
 
@@ -173,13 +178,13 @@ const deleteProductBatch = async () => {
 
   try {
     await axios.delete('/product/batch', {
-      data: selectedIds.value,
-      params: { userId: currentUser.value.id }
+      data: selectedIds.value
     })
+
     alert('批次刪除成功！')
     getProducts(currentPage.value)
   } catch (err) {
-    alert(err.response?.data || '刪除失敗')
+    handleError(err, '批次刪除失敗')
   }
 }
 
@@ -195,12 +200,18 @@ const getCategories = async () => {
 
 // 初始化
 onMounted(() => {
+  const token = localStorage.getItem('token')
   const storedUser = localStorage.getItem('currentUser')
-  if (!storedUser) {
+
+  if (!token) {
     router.push('/login')
     return
   }
-  currentUser.value = JSON.parse(storedUser)
+
+  if (storedUser) {
+    currentUser.value = JSON.parse(storedUser)
+  }
+
   getProducts()
   getCategories()
 
@@ -340,10 +351,10 @@ onUnmounted(() => {
         </div>
 
         <div class="form-group">
-          <label>分類名稱</label>
-          <select v-model="productForm.categoryName" @keyup.enter="handleSubmit">
-            <option disabled value="">請選擇一個分類</option>
-            <option v-for="c in categoryList" :key="c.id" :value="c.name">
+          <label>分類</label>
+          <select v-model="productForm.categoryId" @keyup.enter="handleSubmit">
+            <option :value="null" disabled>請選擇一個分類</option>
+            <option v-for="c in categoryList" :key="c.id" :value="c.id">
               {{c.name}}
             </option>
           </select>
@@ -362,253 +373,56 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.container {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding-bottom: 50px;
-}
-
-h1 {
-  text-align: center;
-  font-weight: 700;
-  margin-bottom: 30px;
-  font-size: 2rem;
-  color: var(--text-main);
-}
-
-/* --- 工具列 --- */
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-}
-
-/* 搜尋框 */
-.search-box {
-  display: flex;
-  gap: 8px;
-}
-.search-box input {
-  width: 200px;
-  padding: 8px 12px;
-  background-color: var(--bg-body);
-  color: var(--text-main);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-
-/* --- 按鈕樣式 --- */
-.btn {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.2s;
-  color: var(--text-main);
-  background-color: var(--bg-card);
-  border: 1px solid var(--border);
-}
-
-.btn-primary {
-  background-color: #3182ce;
-  color: white;
-  border: none;
-}
+/* 樣式保持原樣 */
+.container { max-width: 1000px; margin: 0 auto; padding-bottom: 50px; }
+h1 { text-align: center; font-weight: 700; margin-bottom: 30px; font-size: 2rem; color: var(--text-main); }
+.toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.search-box { display: flex; gap: 8px; }
+.search-box input { width: 200px; padding: 8px 12px; background-color: var(--bg-body); color: var(--text-main); border: 1px solid var(--border); border-radius: 6px; }
+.btn { padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; color: var(--text-main); background-color: var(--bg-card); border: 1px solid var(--border); }
+.btn-primary { background-color: #3182ce; color: white; border: none; }
 .btn-primary:hover { background-color: #2b6cb0; }
-
-.btn-danger {
-  background-color: #e53e3e;
-  color: white;
-  border: none;
-}
+.btn-danger { background-color: #e53e3e; color: white; border: none; }
 .btn-danger:hover { background-color: #c53030; }
-.btn-danger:disabled {
-  background-color: #cbd5e0;
-  color: #718096;
-  cursor: not-allowed;
-}
-
-.btn-edit {
-  background-color: #ecc94b;
-  color: #744210;
-  border: none;
-  margin-right: 8px;
-}
+.btn-danger:disabled { background-color: #cbd5e0; color: #718096; cursor: not-allowed; }
+.btn-edit { background-color: #ecc94b; color: #744210; border: none; margin-right: 8px; }
 .btn-edit:hover { background-color: #d69e2e; }
-
-.btn-search {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border);
-  padding: 8px 12px;
-}
+.btn-search { background-color: var(--bg-card); border: 1px solid var(--border); padding: 8px 12px; }
 .btn-search:hover { background-color: var(--hover-bg); }
-
 .btn-sm { padding: 8px 12px; }
-
-/* --- 表格樣式 --- */
-.table-container {
-  box-shadow: var(--shadow);
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  background-color: var(--bg-card);
-}
-
+.table-container { box-shadow: var(--shadow); border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background-color: var(--bg-card); }
 table { width: 100%; border-collapse: collapse; }
 thead { background-color: var(--th-bg); }
-
-th {
-  text-align: left;
-  padding: 16px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  color: var(--text-sec);
-  border-bottom: 1px solid var(--border);
-}
-
-td {
-  padding: 16px;
-  font-size: 0.95rem;
-  border-bottom: 1px solid var(--border);
-  vertical-align: middle;
-  color: var(--text-main);
-}
-
+th { text-align: left; padding: 16px; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; color: var(--text-sec); border-bottom: 1px solid var(--border); }
+td { padding: 16px; font-size: 0.95rem; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--text-main); }
 tr:hover { background-color: var(--hover-bg); }
 .selected-row { background-color: var(--select-bg) !important; }
-
 .name-col { font-weight: 500; }
 .desc-col { color: var(--text-sec); font-size: 0.9rem; }
 .price { color: #48bb78; font-weight: 600; font-family: 'Courier New', monospace; }
 .id-col { color: var(--text-sec); font-size: 0.85rem; }
-
-.seller-badge {
-  background-color: var(--badge-bg);
-  color: var(--badge-text);
-  padding: 4px 8px;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
+.seller-badge { background-color: var(--badge-bg); color: var(--badge-text); padding: 4px 8px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
 .checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: #3182ce; }
-
-/* --- 分頁控制器 --- */
-.pagination {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-top: 20px;
-  gap: 15px;
-}
-
-.page-info {
-  font-size: 0.9rem;
-  color: var(--text-sec);
-  font-weight: bold;
-}
-
-.btn-page {
-  padding: 8px 16px;
-  background-color: var(--bg-card);
-  border: 1px solid var(--border);
-  color: var(--text-main);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-page:hover:not(:disabled) {
-  background-color: var(--hover-bg);
-  border-color: #3182ce;
-  color: #3182ce;
-}
-
+.pagination { display: flex; justify-content: center; align-items: center; margin-top: 20px; gap: 15px; }
+.page-info { font-size: 0.9rem; color: var(--text-sec); font-weight: bold; }
+.btn-page { padding: 8px 16px; background-color: var(--bg-card); border: 1px solid var(--border); color: var(--text-main); border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+.btn-page:hover:not(:disabled) { background-color: var(--hover-bg); border-color: #3182ce; color: #3182ce; }
 .btn-page:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* --- 狀態顯示 --- */
-.error {
-  color: #fc8181; background-color: #2d2d2d; padding: 16px;
-  border-radius: 6px; border: 1px solid #e53e3e;
-  text-align: center; margin-bottom: 20px;
-}
+.error { color: #fc8181; background-color: #2d2d2d; padding: 16px; border-radius: 6px; border: 1px solid #e53e3e; text-align: center; margin-bottom: 20px; }
 .loading, .empty-state { text-align: center; color: var(--text-sec); padding: 40px; }
-
-/* --- 彈窗樣式 --- */
-.modal-overlay {
-  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  background-color: rgba(0, 0, 0, 0.75);
-  display: flex; justify-content: center; align-items: center;
-  z-index: 9999;
-}
-
-.modal-content {
-  background-color: var(--bg-card);
-  color: var(--text-main);
-  padding: 30px;
-  border-radius: 12px;
-  width: 400px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-  border: 1px solid var(--border);
-}
-
+.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.75); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+.modal-content { background-color: var(--bg-card); color: var(--text-main); padding: 30px; border-radius: 12px; width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid var(--border); }
 .modal-content h2 { margin-top: 0; margin-bottom: 20px; color: var(--text-main); }
-
 .form-group { margin-bottom: 15px; }
 .form-row { display: flex; gap: 15px; }
 .form-row .form-group { flex: 1; }
-
-label {
-  display: block; margin-bottom: 5px; font-weight: bold; color: var(--text-sec); font-size: 0.9rem;
-}
-
-input, textarea, select {
-  width: 100%; padding: 10px;
-  border: 1px solid var(--border); border-radius: 6px;
-  background-color: var(--bg-body); color: var(--text-main);
-  font-size: 1rem; box-sizing: border-box;
-}
-
+label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--text-sec); font-size: 0.9rem; }
+input, textarea, select { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background-color: var(--bg-body); color: var(--text-main); font-size: 1rem; box-sizing: border-box; }
 textarea { height: 80px; resize: vertical; }
-
-.modal-actions {
-  display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;
-}
-
-/* --- 表格欄位寬度控制 (關鍵) --- */
-/* 1. 給予欄位最大寬度，超出才能截斷 */
-th:nth-child(3), td:nth-child(3) { max-width: 150px; } /* 商品名稱欄 */
-th:nth-child(4), td:nth-child(4) { max-width: 250px; } /* 描述欄 (給寬一點) */
-
-/* --- 樣式 A: 單行省略 (適用於名稱) --- */
-.text-truncate {
-  white-space: nowrap;       /* 強制不換行 */
-  overflow: hidden;          /* 超出隱藏 */
-  text-overflow: ellipsis;   /* 顯示 ... */
-  width: 100%;
-  display: block;
-}
-
-/* --- 樣式 B: 多行省略 (適用於描述) --- */
-.text-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;     /* 限制顯示 2 行 */
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.5;          /* 行高 */
-  max-height: 3em;           /* 行高 1.5 * 2 行 = 3em，確保高度固定 */
-  font-size: 0.9rem;
-  color: var(--text-sec);    /* 描述文字顏色淡一點，增加層次感 */
-}
-
-/* --- 其他欄位微調 --- */
-.name-col {
-  font-weight: 600;
-  color: var(--text-main);
-}
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+th:nth-child(3), td:nth-child(3) { max-width: 150px; }
+th:nth-child(4), td:nth-child(4) { max-width: 250px; }
+.text-truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; width: 100%; display: block; }
+.text-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; line-height: 1.5; max-height: 3em; font-size: 0.9rem; color: var(--text-sec); }
+.name-col { font-weight: 600; color: var(--text-main); }
 </style>

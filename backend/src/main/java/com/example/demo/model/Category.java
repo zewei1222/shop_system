@@ -1,20 +1,25 @@
 package com.example.demo.model;
 
 import jakarta.persistence.*;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 
-@Data
+import lombok.Getter;
+import lombok.Setter;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
+@Getter
+@Setter
 @AllArgsConstructor
 @NoArgsConstructor
 @Entity
-@Table(name = "CATEGORIES")
+@Table(name = "categories")
 public class Category {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "ID", columnDefinition = "INTEGER", nullable = false, unique = true)
+    @Column(name = "id", nullable = false, unique = true)
     private Long id;
-    @Column(name = "NAME", columnDefinition = "TEXT", nullable = false, unique = true)
+
+    @Column(name = "name", nullable = false, unique = true)
     private String name;
 }

@@ -2,61 +2,82 @@
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 
-// --- 資料定義 ---
 const router = useRouter()
 const route = useRoute()
 const currentUser = ref(null)
-const showUserMenu = ref(false) // 控制下拉選單顯示
+const showUserMenu = ref(false)
 const menuRef = ref(null)
-
 const isSidebarOpen = ref(true)
 
-// ★ 新增：切換側邊欄函式
+// ★ 工具函式：解析 JWT Token (不依賴後端，直接看 Token 內容)
+const parseJwt = (token) => {
+  try {
+    const base64Url = token.split('.')[1]
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/')
+    const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+      return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
+    }).join(''))
+    return JSON.parse(jsonPayload)
+  } catch (e) {
+    return null
+  }
+}
+
 const toggleSidebar = () => {
   isSidebarOpen.value = !isSidebarOpen.value
 }
 
+// 判斷是否為管理員 (根據 Token 解析出的內容，或是簡單判斷 username)
 const isAdmin = computed(() => {
-  return currentUser.value && currentUser.value.role === "ROLE_ADMIN"
+  // 假設 Token 裡沒有 role 欄位，我們先暫時用 username 判斷，之後 Phase 4 再教你標準做法
+  // 這裡先假設 admin 帳號就是管理員
+  return currentUser.value && currentUser.value.sub === 'admin'
 })
 
-// 取得使用者第一個字當頭像 (如果沒有名稱就顯示 U)
 const userInitial = computed(() => {
-  return currentUser.value?.username?.charAt(0).toUpperCase() || 'U'
+  // JWT 的標準欄位是 'sub' (Subject) 代表帳號
+  return currentUser.value?.sub?.charAt(0).toUpperCase() || 'U'
 })
 
-const handleLogout = ()=>{
+const handleLogout = () => {
   if(confirm("確定要登出嗎?")){
-    localStorage.removeItem("currentUser")
+    // ★ 關鍵修正：清除 token
+    localStorage.removeItem("token")
+    localStorage.removeItem("username")
     router.push('/login')
   }
 }
 
-// 切換選單開關
-const toggleMenu = () => {
-  showUserMenu.value = !showUserMenu.value
-}
+const toggleMenu = () => { showUserMenu.value = !showUserMenu.value }
 
-// 點擊外部關閉選單 (Click Outside)
 const handleClickOutside = (event) => {
-  // 如果選單是開的，且點擊的目標不在選單範圍內，就關閉
   if (showUserMenu.value && menuRef.value && !menuRef.value.contains(event.target)) {
     showUserMenu.value = false
   }
 }
 
-onMounted(()=>{
-  const storedUser = localStorage.getItem('currentUser')
-  if (!storedUser) {
+onMounted(() => {
+  // 1. 檢查是否有 Token
+  const token = localStorage.getItem('token')
+  if (!token) {
     router.push('/login')
     return
   }
-  currentUser.value = JSON.parse(storedUser)
+
+  // 2. 解析 Token 取得使用者資訊
+  const payload = parseJwt(token)
+  if (payload) {
+    currentUser.value = payload
+    // payload 裡通常包含: { sub: "username", exp: 123456... }
+  } else {
+    // Token 格式錯誤，清除並登出
+    handleLogout()
+  }
+
   document.addEventListener('click', handleClickOutside)
 })
 
 onUnmounted(() => {
-  // 移除事件偵測 (避免記憶體洩漏)
   document.removeEventListener('click', handleClickOutside)
 })
 </script>

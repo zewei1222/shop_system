@@ -27,7 +27,7 @@ const handleRegister = async () => {
   try {
     // 2. 改用 axios.post，並使用相對路徑
     // 這樣會自動指向 main.js 設定的 http://172.20.10.3:8080/api
-    await axios.post('/api/users/register', {
+    await axios.post('/api/auth/register', {
       username: username.value,
       password: password.value
     })

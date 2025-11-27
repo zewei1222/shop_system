@@ -1,31 +1,27 @@
 package com.example.demo.service;
 
 import com.example.demo.model.Category;
-import com.example.demo.model.User;
 import com.example.demo.model.Role;
+import com.example.demo.model.User;
 import com.example.demo.repository.CategoryRepository;
-import com.example.demo.repository.ProductRepository; // 1. 引入 ProductRepository
-
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.example.demo.repository.ProductRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor // 1. 改用建構子注入，程式碼更乾淨
 public class CategoryService {
 
-    @Autowired
-    private CategoryRepository categoryRepository;
+    private final CategoryRepository categoryRepository;
+    private final ProductRepository productRepository;
 
-    @Autowired
-    private ProductRepository productRepository; // 2. 注入 ProductRepository
-
-    // --- [新增] 提供給 ProductService 呼叫的方法 ---
-    // 讓 ProductService 不需要直接存取 CategoryRepository
+    // 給 ProductService 用的內部方法
     public Category getCategoryByName(String name) {
         return categoryRepository.findByName(name)
-                .orElseThrow(() -> new RuntimeException("[Service Error]: Category '" + name + "' not found"));
+                .orElseThrow(() -> new RuntimeException("找不到分類: " + name));
     }
 
     @Transactional(readOnly = true)
@@ -33,53 +29,46 @@ public class CategoryService {
         return categoryRepository.findAll();
     }
 
+    // [C] 新增分類
     @Transactional
-    public Category addCategory(Category category, User currentUser) {
-        if (!currentUser.getRole().equals(Role.ROLE_ADMIN)) {
-            throw new RuntimeException("[Service Error]: 權限不足");
-        }
+    public Category createCategory(Category category) {
+        // 注意：Controller 層已經透過 @AuthenticationPrincipal 拿到 User
+        // 這裡可以再次檢查權限，或者相信 Controller 的判斷
+        // 為了簡化，這裡專注於業務邏輯：檢查名稱重複
         if (categoryRepository.findByName(category.getName()).isPresent()) {
-            throw new RuntimeException("[Service Error]: Category " + category.getName() + " already exists");
+            throw new RuntimeException("分類名稱 '" + category.getName() + "' 已存在");
         }
         return categoryRepository.save(category);
     }
 
+    // [D] 刪除分類
     @Transactional
-    public void deleteCategory(Long categoryId, User currentUser) {
-        if (!currentUser.getRole().equals(Role.ROLE_ADMIN)) {
-            throw new RuntimeException("[Service Error]: 權限不足");
-        }
-
+    public void deleteCategory(Long categoryId) {
         Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new RuntimeException("[Service Error]: Category " + categoryId + " not found"));
+                .orElseThrow(() -> new RuntimeException("找不到分類 ID: " + categoryId));
 
-        // 3. [實作 TODO] 檢查是否有商品正在使用該分類
-        // 防止刪除分類後，導致商品變成孤兒或資料庫報錯
+        // 防呆：如果分類下還有商品，禁止刪除
         if (productRepository.existsByCategory(category)) {
-            throw new RuntimeException("[Service Error]: 無法刪除！分類 '" + category.getName() + "' 下尚有商品，請先移除相關商品。");
+            throw new RuntimeException("無法刪除！分類 '" + category.getName() + "' 下尚有商品。");
         }
 
         categoryRepository.delete(category);
-        System.out.println("[Service]: Category Deleted Successfully");
     }
 
+    // [U] 更新分類 (Optional, 如果你有做編輯功能的話)
     @Transactional
-    public Category updateCategory(Long categoryId, String newName, User currentUser) {
-        if (!currentUser.getRole().equals(Role.ROLE_ADMIN)) {
-            throw new RuntimeException("[Service Error]: 權限不足");
-        }
+    public Category updateCategory(Long id, Category newInfo) {
+        Category category = categoryRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("找不到分類"));
 
-        Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new RuntimeException("[Service Error]: Category " + categoryId + " not found"));
-
-        // 檢查新名稱是否跟別的分類衝突 (排除自己)
-        categoryRepository.findByName(newName).ifPresent(c -> {
-            if (!c.getId().equals(categoryId)) {
-                throw new RuntimeException("[Service Error]: Category name '" + newName + "' has been used");
+        // 檢查撞名 (排除自己)
+        categoryRepository.findByName(newInfo.getName()).ifPresent(c -> {
+            if (!c.getId().equals(id)) {
+                throw new RuntimeException("分類名稱已存在");
             }
         });
 
-        category.setName(newName);
+        category.setName(newInfo.getName());
         return categoryRepository.save(category);
     }
 }

@@ -1,22 +1,26 @@
 package com.example.demo.dto;
 
-public class ProductRequest {
-    // 前端只需要傳這些，不需要傳 ID、Owner、也不需要傳完整的 Category 物件
-    private String name;
-    private String description;
-    private double price;
-    private int stock;
-    private String categoryName; // 前端只傳分類名稱字串
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import lombok.Getter;
+import lombok.Setter;
 
-    // --- Getters and Setters (務必生成) ---
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public double getPrice() { return price; }
-    public void setPrice(double price) { this.price = price; }
-    public int getStock() { return stock; }
-    public void setStock(int stock) { this.stock = stock; }
-    public String getCategoryName() { return categoryName; }
-    public void setCategoryName(String categoryName) { this.categoryName = categoryName; }
+
+@Getter
+@Setter
+public class ProductRequest {
+    @NotBlank(message = "商品名稱不能為空")
+    private String name;
+
+    private String description;
+
+    @Positive(message = "價格必須大於 0")
+    private double price;
+
+    @Positive(message = "庫存必須大於 0")
+    private int stock;
+
+    @NotNull(message = "必須選擇分類")
+    private Long categoryId;
 }

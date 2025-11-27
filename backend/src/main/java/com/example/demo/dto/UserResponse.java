@@ -1,20 +1,20 @@
 package com.example.demo.dto;
 
-import com.example.demo.model.Role;
 import com.example.demo.model.User;
+import lombok.Getter;
+import lombok.Setter;
 
+
+@Getter
+@Setter
 public class UserResponse {
     private Long id;
     private String username;
-    private Role role;
+    private String role;
 
     public UserResponse(User user){
         this.id = user.getId();
-        this.username = user.getName();
-        this.role = user.getRole();
+        this.username = user.getUsername();
+        this.role = (user.getRole() != null) ? user.getRole().name() : null;
     }
-
-    public Long getId() {return id;}
-    public void setId(Long id) {this.id = id;}
-    public String getUsername() {return username;}
 }

@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios' // 1. 引入 axios
+import axios from 'axios'
 
 const router = useRouter()
 const username = ref('')
@@ -18,67 +18,73 @@ const handleLogin = async () => {
   }
 
   try {
-    // 2. 改用 axios.post
-    // 注意：這裡不需要寫 http://IP:8080，因為 main.js 已經設定了 baseURL
-    // 路徑只需寫 /users/login (對應後端 Controller 路徑)
-    const response = await axios.post('api/users/login', {
+    // 1. 發送登入請求 (注意路徑與後端 Controller 一致)
+    const response = await axios.post('http://localhost:8080/api/auth/login', {
       username: username.value,
       password: password.value
     })
 
-    // axios 成功會直接回傳結果，不需要像 fetch 那樣檢查 response.ok
-    // 3. 儲存使用者資訊 (假設後端回傳的物件直接包含 user info)
-    localStorage.setItem('currentUser', JSON.stringify(response.data))
+    // 2. 取得 Token
+    // 後端回傳格式: { "token": "eyJhbGciOiJIUz..." }
+    const token = response.data.token;
 
+    // 3. 存入 localStorage (這是最重要的通行證！)
+    localStorage.setItem('token', token);
+
+    // 順便存一下使用者名稱，方便之後顯示 "Hello, Admin" (非必要，但體驗較好)
+    localStorage.setItem('username', username.value);
+
+    // 4. 轉跳回首頁
     alert('登入成功！')
     router.push('/')
 
   } catch (err) {
     console.error(err)
-    // 4. 處理錯誤回傳
-    if (err.response && err.response.status === 400) {
-      // 這是我們剛才在後端 GlobalExceptionHandler 設定的錯誤格式
-      // 如果是 Map 格式，可能需要轉字串顯示，這裡先簡單顯示
+    // 錯誤處理
+    if (err.response && (err.response.status === 403 || err.response.status === 401)) {
       errorMsg.value = '登入失敗：帳號或密碼錯誤'
+    } else if (err.code === 'ERR_NETWORK') {
+      errorMsg.value = '連線失敗，後端伺服器沒開？'
     } else {
-      errorMsg.value = '連線失敗，請檢查網路或後端伺服器'
+      errorMsg.value = '發生未知錯誤，請稍後再試'
     }
   }
 }
 </script>
 
 <template>
-<div class="login-container">
-  <div class="login-card">
-    <h1>登入商店</h1>
+  <div class="login-container">
+    <div class="login-card">
+      <h1>登入商店</h1>
 
-    <div class="form-group">
-      <label>帳號</label>
-      <input type="text" v-model="username" placeholder="請輸入帳號"></input>
+      <div class="form-group">
+        <label>帳號</label>
+        <input type="text" v-model="username" placeholder="請輸入帳號">
+      </div>
+
+      <div class="form-group">
+        <label>密碼</label>
+        <input type="password" v-model="password" placeholder="請輸入密碼">
+      </div>
+
+      <div v-if="errorMsg" class="error-text">{{ errorMsg }}</div>
+      <button class="btn-login" @click="handleLogin">登入</button>
+
+      <div class="links">
+        <router-link to="/register">還沒帳號？註冊一個</router-link>
+      </div>
+
     </div>
-
-    <div class="form-group">
-      <label>密碼</label>
-      <input type="password" v-model="password" placeholder="請輸入帳號"></input>
-    </div>
-
-    <div v-if="errorMsg" class="error-text">{{ errorMsg }}</div>
-    <button class="btn-login" @click="handleLogin">登入</button>
-
-    <div class="links">
-      <router-link to="/register">還沒帳號？註冊一個</router-link>
-    </div>
-
   </div>
-</div>
 </template>
 
 <style scoped>
+/* 樣式保持原本的不變，寫得很好！ */
 .login-container {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh; /* 佔滿全螢幕高度 */
+  height: 100vh;
   background-color: var(--bg-body);
 }
 
