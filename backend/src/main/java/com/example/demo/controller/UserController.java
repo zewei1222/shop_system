@@ -1,9 +1,10 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.UserRequest;
+import com.example.demo.dto.UserResponse;
 import com.example.demo.model.Role;
 import com.example.demo.model.User;
 import com.example.demo.service.UserService;
-import com.example.demo.repository.UserRepository; // 簡單起見直接用 Repository 示範
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,33 +17,52 @@ import java.util.List;
 @RequiredArgsConstructor
 public class UserController {
 
-    private final UserRepository userRepository;
+    private final UserService userService;
 
-    // [R] 取得所有使用者 (僅限管理員)
-    @GetMapping
-    public ResponseEntity<?> getAllUsers(@AuthenticationPrincipal User currentUser) {
-        // 簡易權限檢查
-        if (currentUser.getRole() != Role.ROLE_ADMIN) {
-            return ResponseEntity.status(403).body("權限不足：僅管理員可執行");
+    private void checkAdmin(User user) {
+        if (user.getRole() != Role.ROLE_ADMIN) {
+            throw new RuntimeException("權限不足：僅管理員可執行");
         }
-
-        // 實務上建議回傳 UserDTO 而不是 User Entity (避免洩漏密碼)
-        // 但這裡為了教學方便，直接回傳 List<User>
-        // ★重要：請確保 User Entity 的 password 欄位有加 @JsonIgnore (Jackson)
-        // 或是你前端不要顯示密碼欄位
-        return ResponseEntity.ok(userRepository.findAll());
     }
 
-    // [D] 刪除使用者
+    @GetMapping
+    public ResponseEntity<List<UserResponse>> getAllUsers(@AuthenticationPrincipal User currentUser) {
+        checkAdmin(currentUser);
+        List<UserResponse> list = userService.getAllUsers().stream()
+                .map(UserResponse::new)
+                .toList();
+        return ResponseEntity.ok(list);
+    }
+
+    // [C] 新增使用者
+    @PostMapping
+    public ResponseEntity<UserResponse> createUser(
+            @RequestBody UserRequest request,
+            @AuthenticationPrincipal User currentUser) {
+        checkAdmin(currentUser);
+        return ResponseEntity.ok(new UserResponse(userService.createUser(request)));
+    }
+
+    // [U] 編輯使用者
+    @PutMapping("/{id}")
+    public ResponseEntity<UserResponse> updateUser(
+            @PathVariable Long id,
+            @RequestBody UserRequest request,
+            @AuthenticationPrincipal User currentUser) {
+        checkAdmin(currentUser);
+        return ResponseEntity.ok(new UserResponse(userService.updateUser(id, request, currentUser)));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteUser(
             @PathVariable Long id,
             @AuthenticationPrincipal User currentUser) {
-
-        if (currentUser.getRole() != Role.ROLE_ADMIN) {
-            return ResponseEntity.status(403).body("權限不足");
+        checkAdmin(currentUser);
+        try {
+            userService.deleteUser(id, currentUser);
+            return ResponseEntity.noContent().build();
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
-        userRepository.deleteById(id);
-        return ResponseEntity.noContent().build();
     }
 }

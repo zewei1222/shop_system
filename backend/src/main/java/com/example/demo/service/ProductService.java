@@ -8,7 +8,7 @@ import com.example.demo.model.User;
 import com.example.demo.repository.CategoryRepository;
 import com.example.demo.repository.ProductRepository;
 import com.example.demo.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -18,16 +18,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-
+@RequiredArgsConstructor
 @Service
 public class ProductService {
-    //資料庫關聯
-    @Autowired
-    private ProductRepository productRepository;
-    @Autowired
-    private UserRepository userRepository;
-    @Autowired
-    private CategoryRepository categoryRepository;
+
+    private final ProductRepository productRepository;
+    private final CategoryRepository categoryRepository;
 
     //[C]
     @Transactional
@@ -46,39 +42,46 @@ public class ProductService {
 
         return productRepository.save(product);
     }
-    //[R]查詢商品
+    // [R] 查詢商品 (支援動態排序)
     @Transactional(readOnly = true)
-    public Page<Product> getProducts(User user, String keyword, int page, int size){
-        // 1. 準備分頁設定 (Pageable)
-        // 參數：(第幾頁, 一頁幾筆, 排序方式)
-        // 這裡設定：依照 ID 倒序排列 (最新的商品排在最前面)
-        Pageable pageable = PageRequest.of(page, size, Sort.by("id").descending());
-        // 2. 判斷是否有關鍵字 (防止 null 或 空白字串)
+    public Page<Product> getProducts(User user, String keyword, int page, int size, String sortBy, String sortDir) {
+
+        // 1. 欄位對應 (Mapping)
+        // 防止前端傳來 "categoryName" 但資料庫不認識，要轉成 "category.name"
+        String sortField = switch (sortBy) {
+            case "ownerName" -> "owner.username";   // 對應 User 的 username
+            case "categoryName" -> "category.name"; // 對應 Category 的 name
+            default -> sortBy; // id, name, price, stock 這些欄位名稱一致，直接用
+        };
+
+        // 2. 建立排序物件 (動態決定是升序還是降序)
+        Sort sort = sortDir.equalsIgnoreCase("asc")
+                ? Sort.by(sortField).ascending()
+                : Sort.by(sortField).descending();
+
+        // 3. ★ 關鍵：將動態的 sort 放進 PageRequest
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        // 4. 判斷是否有關鍵字
         boolean hasKeyword = keyword != null && !keyword.trim().isEmpty();
-        // 3. 依照身分決定搜尋範圍
-        // 管理員
+
+        // 5. 執行查詢 (維持原樣)
         if (user.getRole() == Role.ROLE_ADMIN) {
-            if (hasKeyword){
-                //可以查到所有該關鍵字的商品
+            if (hasKeyword) {
                 return productRepository.findByNameContaining(keyword, pageable);
-            }else{
-                //查詢所有商品
+            } else {
                 return productRepository.findAll(pageable);
             }
-        // 一般用戶
-        }else if(user.getRole() == Role.ROLE_USER){
-            if (hasKeyword){
-                // 只能查到自己的有關鍵字的商品
+        } else if (user.getRole() == Role.ROLE_USER) {
+            if (hasKeyword) {
                 return productRepository.findByOwnerAndNameContaining(user, keyword, pageable);
-            }else{
-                //查詢自己有的所有商品
+            } else {
                 return productRepository.findByOwner(user, pageable);
             }
-        }else{
+        } else {
             throw new RuntimeException("查詢錯誤");
         }
     }
-
     //[U]更新商品
     @Transactional
     public Product updateProduct(ProductRequest request, User user, Long productId) {

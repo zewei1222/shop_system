@@ -5,6 +5,7 @@ import com.example.demo.model.Role;
 import com.example.demo.model.User;
 import com.example.demo.repository.CategoryRepository;
 import com.example.demo.repository.ProductRepository;
+import com.example.demo.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,14 +17,10 @@ import java.util.List;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
+    private final UserRepository userRepository;
     private final ProductRepository productRepository;
 
-    // 給 ProductService 用的內部方法
-    public Category getCategoryByName(String name) {
-        return categoryRepository.findByName(name)
-                .orElseThrow(() -> new RuntimeException("找不到分類: " + name));
-    }
-
+    // [R]讀取分類
     @Transactional(readOnly = true)
     public List<Category> getAllCategories() {
         return categoryRepository.findAll();
@@ -31,9 +28,12 @@ public class CategoryService {
 
     // [C] 新增分類
     @Transactional
-    public Category createCategory(Category category) {
+    public Category createCategory(Category category, User user) {
         // 注意：Controller 層已經透過 @AuthenticationPrincipal 拿到 User
         // 這裡可以再次檢查權限，或者相信 Controller 的判斷
+        if(!Role.ROLE_ADMIN.equals(user.getRole())) {
+            throw new RuntimeException("你沒有權限");
+        }
         // 為了簡化，這裡專注於業務邏輯：檢查名稱重複
         if (categoryRepository.findByName(category.getName()).isPresent()) {
             throw new RuntimeException("分類名稱 '" + category.getName() + "' 已存在");
@@ -43,7 +43,12 @@ public class CategoryService {
 
     // [D] 刪除分類
     @Transactional
-    public void deleteCategory(Long categoryId) {
+    public void deleteCategory(Long categoryId, User user) {
+
+        if(!Role.ROLE_ADMIN.equals(user.getRole())) {
+            throw new RuntimeException("你沒有權限");
+        }
+
         Category category = categoryRepository.findById(categoryId)
                 .orElseThrow(() -> new RuntimeException("找不到分類 ID: " + categoryId));
 
@@ -57,18 +62,23 @@ public class CategoryService {
 
     // [U] 更新分類 (Optional, 如果你有做編輯功能的話)
     @Transactional
-    public Category updateCategory(Long id, Category newInfo) {
+    public Category updateCategory(Long id, String newName, User user) {
+
+        if(!Role.ROLE_ADMIN.equals(user.getRole())) {
+            throw new RuntimeException("你沒有權限");
+        }
+
         Category category = categoryRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("找不到分類"));
 
         // 檢查撞名 (排除自己)
-        categoryRepository.findByName(newInfo.getName()).ifPresent(c -> {
+        categoryRepository.findByName(newName).ifPresent(c -> {
             if (!c.getId().equals(id)) {
                 throw new RuntimeException("分類名稱已存在");
             }
         });
 
-        category.setName(newInfo.getName());
+        category.setName(newName);
         return categoryRepository.save(category);
     }
 }

@@ -33,16 +33,19 @@ public class ProductController {
                 .body(new ProductResponse(createdProduct));
     }
 
-    //[R]
+    // [R]
     @GetMapping
     public ResponseEntity<Page<ProductResponse>> getAllProducts(
             @AuthenticationPrincipal User currentUser,
-            @RequestParam(defaultValue = "0") int page,     // 預設第 0 頁
-            @RequestParam(defaultValue = "10") int size,    // 預設一頁 10 筆
-            @RequestParam(defaultValue = "") String keyword // 預設無關鍵字
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "") String keyword,
+            // 新增這兩個參數，預設依 ID 倒序
+            @RequestParam(defaultValue = "id") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir
     ) {
-
-        Page<Product> productPage = productService.getProducts(currentUser, keyword, page, size);
+        // 傳入 Service
+        Page<Product> productPage = productService.getProducts(currentUser, keyword, page, size, sortBy, sortDir);
 
         Page<ProductResponse> responsePage = productPage.map(ProductResponse::new);
 

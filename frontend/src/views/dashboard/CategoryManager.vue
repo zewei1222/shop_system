@@ -1,12 +1,20 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue' // 記得引入 onUnmounted
+import { showSuccess, showError, showConfirm } from '@/utils/swal'
 import axios from 'axios'
 
 const categories = ref([])
-const newCategoryName = ref('')
 const loading = ref(false)
 
-// 1. 取得分類
+// 彈窗相關狀態
+const showModal = ref(false)
+const isEditMode = ref(false)
+const currentCategoryId = ref(null)
+const categoryForm = ref({ name: '' })
+
+// ★ 新增：點擊遮罩關閉的邏輯變數
+const isOverlayClick = ref(false)
+
 const fetchCategories = async () => {
   loading.value = true
   try {
@@ -14,52 +22,111 @@ const fetchCategories = async () => {
     categories.value = res.data
   } catch (err) {
     console.error(err)
-    alert("無法讀取分類列表")
+    showError("無法讀取分類列表")
   } finally {
     loading.value = false
   }
 }
 
-// 2. 新增分類
-const handleAdd = async () => {
-  if(!newCategoryName.value.trim()) return
-  try {
-    await axios.post('/category', { name: newCategoryName.value })
-    newCategoryName.value = ''
-    fetchCategories()
-    alert("新增分類成功")
-  } catch (err) {
-    alert("新增失敗：" + (err.response?.data?.message || err.message))
+const openCreateModal = () => {
+  isEditMode.value = false
+  currentCategoryId.value = null
+  categoryForm.value = { name: '' }
+  showModal.value = true
+}
+
+const openEditModal = (c) => {
+  isEditMode.value = true
+  currentCategoryId.value = c.id
+  categoryForm.value = { name: c.name }
+  showModal.value = true
+}
+
+// ★ 新增：遮罩點擊判斷 (防止誤觸)
+const handleOverlayMousedown = (e) => {
+  if (e.target === e.currentTarget) isOverlayClick.value = true
+}
+const handleOverlayMouseup = (e) => {
+  if (isOverlayClick.value && e.target === e.currentTarget) showModal.value = false
+  isOverlayClick.value = false
+}
+
+// ★ 修改後：同時處理 Esc (關閉) 和 Enter (送出)
+const handleKeydown = (e) => {
+  // 如果彈窗沒開，就不做事
+  if (!showModal.value) return
+
+  if (e.key === 'Escape') {
+    // 按 Esc 關閉
+    showModal.value = false
+  } else if (e.key === 'Enter') {
+    // 按 Enter 送出
+    // ★ 防呆機制：如果在 "多行文字框 (textarea)" 裡按 Enter，應該是換行，而不是送出
+    if (e.target.tagName === 'TEXTAREA') return;
+
+    e.preventDefault() // 防止瀏覽器預設行為
+    handleSubmit()     // 呼叫提交函式
   }
 }
 
-// 3. 刪除分類
-const handleDelete = async (id) => {
-  if(!confirm("確定刪除此分類？與此分類關聯的商品可能會受影響！")) return
+const handleSubmit = async () => {
+  if (!categoryForm.value.name.trim()) {
+    showError("分類名稱不能為空")
+    return
+  }
+
   try {
-    await axios.delete(`/category/${id}`)
+    if (isEditMode.value) {
+      await axios.put(`/category/${currentCategoryId.value}`, {
+        name: categoryForm.value.name
+      })
+      await showSuccess("修改成功")
+    } else {
+      await axios.post('/category', {
+        name: categoryForm.value.name
+      })
+      await showSuccess("新增成功")
+    }
+    showModal.value = false
     fetchCategories()
   } catch (err) {
-    alert("刪除失敗：" + (err.response?.data?.message || err.message))
+    showError(err.response?.data?.message || "操作失敗")
   }
+}
+
+const handleDelete = async (id) => {
+  const isConfirmed = await showConfirm("確定刪除此分類？無法刪除還有商品的分類！")
+  if(isConfirmed) {
+    try {
+      await axios.delete(`/category/${id}`)
+      fetchCategories()
+      await showSuccess("刪除成功")
+    } catch (err) {
+      showError(err.response?.data?.message || "刪除失敗，還有商品使用此分類")
+    }
+  }else{
+    return;
+  }
+
 }
 
 onMounted(() => {
   fetchCategories()
+  // ★ 註冊鍵盤監聽
+  document.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  // ★ 移除鍵盤監聽
+  document.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
 <template>
   <div class="page-container">
-    <h2>🏷️ 分類管理</h2>
-
-    <div class="add-section">
-      <input
-          v-model="newCategoryName"
-          placeholder="輸入新分類名稱..."
-          @keyup.enter="handleAdd"
-      >
-      <button class="btn btn-primary" @click="handleAdd">新增</button>
+    <div class="header-row">
+      <h2>🏷️ 分類管理</h2>
+      <button class="btn btn-primary" @click="openCreateModal">+ 新增分類</button>
     </div>
 
     <div v-if="loading">載入中...</div>
@@ -67,9 +134,9 @@ onMounted(() => {
       <table class="simple-table">
         <thead>
         <tr>
-          <th>ID</th>
+          <th width="80">ID</th>
           <th>分類名稱</th>
-          <th>操作</th>
+          <th width="180">操作</th>
         </tr>
         </thead>
         <tbody>
@@ -77,6 +144,7 @@ onMounted(() => {
           <td>{{ c.id }}</td>
           <td>{{ c.name }}</td>
           <td>
+            <button class="btn btn-edit btn-sm" @click="openEditModal(c)">編輯</button>
             <button class="btn btn-danger btn-sm" @click="handleDelete(c.id)">刪除</button>
           </td>
         </tr>
@@ -84,23 +152,136 @@ onMounted(() => {
       </table>
       <div v-if="categories.length === 0" class="empty">暫無分類</div>
     </div>
+
+    <div v-if="showModal" class="modal-overlay"
+         @mousedown="handleOverlayMousedown"
+         @mouseup="handleOverlayMouseup">
+
+      <div class="modal-content">
+        <h3>{{ isEditMode ? '編輯分類' : '新增分類' }}</h3>
+
+        <div class="form-group">
+          <label>分類名稱</label>
+          <input
+              v-model="categoryForm.name"
+              type="text"
+              placeholder="輸入分類名稱..."
+              @keyup.enter="handleSubmit"
+          >
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn btn-cancel" @click="showModal = false">取消(Esc)</button>
+          <button class="btn btn-primary" @click="handleSubmit">確認(Enter)</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
 <style scoped>
-.page-container { max-width: 800px; margin: 0 auto; padding: 20px; }
-h2 { margin-bottom: 20px; color: var(--text-main); }
+.page-container { max-width: 800px; margin: 0 auto; padding: 40px 20px; }
 
-.add-section { display: flex; gap: 10px; margin-bottom: 30px; }
-.add-section input { flex: 1; padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
+/* 標題區塊 */
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+h2 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 1.8rem;
+  font-weight: 700;
+  display: flex; align-items: center; gap: 10px;
+}
 
-.simple-table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: var(--shadow); }
-th, td { padding: 12px; text-align: left; border-bottom: 1px solid #eee; }
-th { background: #f7fafc; font-weight: bold; }
-.empty { text-align: center; padding: 20px; color: #888; }
+/* 表格容器 (卡片化) */
+.list-container {
+  background-color: var(--bg-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
 
-.btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; color: white; }
-.btn-primary { background: #3182ce; }
-.btn-danger { background: #e53e3e; }
-.btn-sm { padding: 4px 8px; font-size: 0.8rem; }
+.simple-table { width: 100%; border-collapse: collapse; }
+th, td { padding: 16px; text-align: left; border-bottom: 1px solid var(--border); color: var(--text-main); }
+th {
+  background-color: var(--th-bg);
+  font-weight: 600;
+  color: var(--text-sec);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.empty { text-align: center; padding: 40px; color: var(--text-muted); }
+
+/* 按鈕系統 */
+.btn {
+  padding: 9px 18px; border: none; border-radius: 8px; font-weight: 500; cursor: pointer;
+  transition: all 0.2s; font-size: 0.9rem;
+}
+.btn:active { transform: scale(0.98); }
+
+.btn-primary {
+  background-color: var(--primary); color: white;
+  box-shadow: 0 2px 4px rgba(79, 70, 229, 0.2);
+}
+.btn-primary:hover { background-color: var(--primary-hover); }
+
+.btn-danger { background-color: var(--bg-body); color: var(--danger); border: 1px solid var(--border); }
+.btn-danger:hover { background-color: #fee2e2; border-color: var(--danger); }
+
+.btn-edit { background-color: var(--bg-body); color: var(--text-sec); border: 1px solid var(--border); }
+.btn-edit:hover { background-color: var(--bg-hover); color: var(--primary); border-color: var(--primary); }
+
+.btn-cancel { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+.btn-cancel:hover { background: var(--bg-hover); }
+
+.btn-sm { padding: 6px 12px; font-size: 0.85rem; margin-right: 6px; }
+
+/* 彈窗系統 (Modern Modal) */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px); /* 毛玻璃特效 */
+  display: flex; justify-content: center; align-items: center; z-index: 9999;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  background-color: var(--bg-card);
+  color: var(--text-main);
+  padding: 32px;
+  border-radius: 16px;
+  width: 420px;
+  box-shadow: var(--shadow-lg);
+  border: 1px solid var(--border);
+  animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-content h3 { margin-top: 0; margin-bottom: 24px; text-align: center; font-size: 1.5rem; }
+
+.form-group { margin-bottom: 24px; }
+.form-group label { display: block; margin-bottom: 8px; font-weight: 600; color: var(--text-sec); font-size: 0.9rem; }
+
+.form-group input {
+  width: 100%; padding: 12px; border-radius: 8px;
+  border: 1px solid var(--border);
+  background-color: var(--bg-body);
+  color: var(--text-main);
+  font-size: 1rem;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.form-group input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-light); }
+
+.modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
+
+/* 動畫 */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 </style>

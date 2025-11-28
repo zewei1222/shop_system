@@ -1,6 +1,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+// 在 script setup 最上方引入
+import { showConfirm } from '@/utils/swal'
 
 const router = useRouter()
 const route = useRoute()
@@ -39,8 +41,9 @@ const userInitial = computed(() => {
   return currentUser.value?.sub?.charAt(0).toUpperCase() || 'U'
 })
 
-const handleLogout = () => {
-  if(confirm("確定要登出嗎?")){
+const handleLogout = async() => {
+  const isConfirmed = await showConfirm("確定要登出嗎?")
+  if(isConfirmed){
     // ★ 關鍵修正：清除 token
     localStorage.removeItem("token")
     localStorage.removeItem("username")

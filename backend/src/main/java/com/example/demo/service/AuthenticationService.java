@@ -25,6 +25,11 @@ public class AuthenticationService {
     private final AuthenticationManager authenticationManager;
 
     public AuthResponse register(RegisterRequest request){
+
+        if (userRepository.findByUsername(request.getUsername()).isPresent()) {
+            throw new RuntimeException("使用者名稱已存在"); // 或自定義 Exception
+        }
+
         // 1. 建立 User 物件
         var user = new User();
         user.setUsername(request.getUsername());

@@ -30,11 +30,11 @@ public class Product extends BaseEntity{
     @Column(name= "stock", nullable = false)
     private int stock;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY) // <--- 改這個
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
 
-    @ManyToOne
+    @ManyToOne(fetch = FetchType.LAZY) // <--- 改這個
     @JoinColumn(name = "owner_id", nullable = false)
     private User owner;
 
