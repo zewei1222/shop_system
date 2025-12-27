@@ -42,8 +42,11 @@ public class JwtService {
     }
 
     // 3. 產生 Token (不帶額外 claims)
-    public String generateToken(String username){
-        return generateToken(new HashMap<>(), username);
+    public String generateToken(String username, String role){
+        Map<String, Object> extraClaims = new HashMap<>();
+        //put ROLE
+        extraClaims.put("role", role);
+        return generateToken(extraClaims, username);
     }
 
     // 4. 產生 Token (帶額外 claims，如 userId, role 等)

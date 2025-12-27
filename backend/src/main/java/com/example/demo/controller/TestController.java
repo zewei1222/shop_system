@@ -10,12 +10,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/test/auth")
 public class TestController {
+
     @Autowired
     private JwtService jwtService;
 
     @GetMapping("/get-token")
-    public String getToken(@RequestParam String username) {
-        return jwtService.generateToken(username);
+    // 修改這裡：加入 role 參數，並設定預設值
+    public String getToken(
+            @RequestParam String username,
+            @RequestParam(defaultValue = "ROLE_USER") String role
+    ) {
+        // 呼叫修改後的 generateToken，把接收到的 role 傳進去
+        return jwtService.generateToken(username, role);
     }
 
     @GetMapping("/validate-token")

@@ -39,7 +39,7 @@ public class AuthenticationService {
         userRepository.save(user);
 
         // 3. 生成 Token
-        var jwtToken = jwtService.generateToken(user.getUsername());
+        var jwtToken = jwtService.generateToken(user.getUsername(), user.getRole().name());
         return new AuthResponse(jwtToken);
     }
 
@@ -53,7 +53,7 @@ public class AuthenticationService {
         var user =  userRepository.findByUsername(request.getUsername())
                 .orElseThrow();
         // 3. 生成 Token
-        var jwtToken = jwtService.generateToken(user.getUsername());
+        var jwtToken = jwtService.generateToken(user.getUsername(), user.getRole().name());
         return new AuthResponse(jwtToken);
     }
 }

@@ -86,13 +86,19 @@ public class UserService {
         User targetUser = userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("User ID " + id + " 不存在"));
 
-        if (currentUser.getId().equals(id)) {
-            throw new RuntimeException("操作失敗：您無法刪除自己的帳號");
-        }
-
-        // ★ 權限防護：不能刪除其他管理員
         if (targetUser.getRole() == Role.ROLE_ADMIN) {
-            throw new RuntimeException("權限不足：您無法刪除其他管理員");
+            long adminCount = userRepository.countByRole(Role.ROLE_ADMIN);
+
+            // admin為最高權限
+            if ("admin".equals(targetUser.getUsername())) {
+                throw new RuntimeException("操作被拒絕：無法刪除最高權限 Root 帳號！");
+            }
+            // 至少要留下一名管理員
+            if (adminCount <= 1) {
+                throw new RuntimeException("操作被拒絕：系統至少需要保留一位管理員！");
+            }
+
+            userRepository.delete(targetUser);
         }
 
         userRepository.deleteById(id);

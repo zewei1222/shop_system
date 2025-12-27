@@ -31,9 +31,7 @@ const toggleSidebar = () => {
 
 // 判斷是否為管理員 (根據 Token 解析出的內容，或是簡單判斷 username)
 const isAdmin = computed(() => {
-  // 假設 Token 裡沒有 role 欄位，我們先暫時用 username 判斷，之後 Phase 4 再教你標準做法
-  // 這裡先假設 admin 帳號就是管理員
-  return currentUser.value && currentUser.value.sub === 'admin'
+  return currentUser.value && currentUser.value.role === 'ROLE_ADMIN'
 })
 
 const userInitial = computed(() => {
@@ -69,6 +67,8 @@ onMounted(() => {
 
   // 2. 解析 Token 取得使用者資訊
   const payload = parseJwt(token)
+  console.log('解析出的 Token 內容:', payload)
+
   if (payload) {
     currentUser.value = payload
     // payload 裡通常包含: { sub: "username", exp: 123456... }

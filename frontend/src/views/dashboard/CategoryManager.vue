@@ -12,6 +12,8 @@ const isEditMode = ref(false)
 const currentCategoryId = ref(null)
 const categoryForm = ref({ name: '' })
 
+const isSubmitting = ref(false)
+
 // ★ 新增：點擊遮罩關閉的邏輯變數
 const isOverlayClick = ref(false)
 
@@ -56,6 +58,9 @@ const handleKeydown = (e) => {
   // 如果彈窗沒開，就不做事
   if (!showModal.value) return
 
+  // 如果使用者正在用輸入法選字 (例如打中文)，不要觸發送出
+  if (e.isComposing) return
+
   if (e.key === 'Escape') {
     // 按 Esc 關閉
     showModal.value = false
@@ -75,22 +80,32 @@ const handleSubmit = async () => {
     return
   }
 
+  // ★ 關鍵防護：如果正在送出中，直接擋掉，防止連點或重複觸發
+  if (isSubmitting.value) return
+  isSubmitting.value = true // 上鎖
+
   try {
     if (isEditMode.value) {
-      await axios.put(`/category/${currentCategoryId.value}`, {
+      const res = await axios.put(`/category/${currentCategoryId.value}`, {
         name: categoryForm.value.name
       })
-      await showSuccess("修改成功")
+      await showSuccess(res.data.message || "修改成功")
     } else {
-      await axios.post('/category', {
+      const res = await axios.post('/category', {
         name: categoryForm.value.name
       })
-      await showSuccess("新增成功")
+      // 確保讀取 res.data 中的 message
+      await showSuccess(res.data.message || "新增成功")
     }
     showModal.value = false
     fetchCategories()
   } catch (err) {
-    showError(err.response?.data?.message || "操作失敗")
+    // 優先讀取後端拋出的 RuntimeException 訊息
+    const errorMsg = err.response?.data?.error || "操作失敗";
+    showError(errorMsg);
+    console.error("錯誤詳情:", err.response?.data);
+  } finally{
+      isSubmitting.value = false
   }
 }
 
